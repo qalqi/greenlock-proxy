@@ -1,6 +1,6 @@
 # 🔒 GreenlockProxy (`@qalqi/greenlock-proxy`)
 
-> **Production-grade reverse proxy with automated Let's Encrypt ACME SSL/TLS certificate management & WebSocket forwarding.**
+> **Production-grade reverse proxy with automated Let's Encrypt ACME SSL/TLS certificate management, HTTP-to-HTTPS redirection, and WebSocket forwarding.**
 
 [![NPM Version](https://img.shields.io/npm/v/@qalqi/greenlock-proxy?color=blue)](https://www.npmjs.com/package/@qalqi/greenlock-proxy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
@@ -16,54 +16,63 @@ It provides zero-config Let's Encrypt HTTPS termination, automated ACME renewals
 
 ---
 
-## 🔑 How ACME Let's Encrypt SSL Automated Certification Works
+## 📐 Architecture & Traffic Flow
 
-Let's Encrypt uses the **ACME HTTP-01 Challenge** protocol to verify domain ownership before issuing free SSL/TLS certificates:
-
-1. **DNS Setup:** Your domain (`example.com`) must point its `A` / `AAAA` DNS record directly to your Cloud Server's Public IP Address (GCP / OCI instance).
-2. **Port 80 Requirement:** When `GreenlockProxy` starts, it listens on **Port 80 (HTTP)** and **Port 443 (HTTPS)**.
-3. **Automatic Interception:** When Let's Encrypt sends an ACME validation request to `http://example.com/.well-known/acme-challenge/...`, `GreenlockProxy` automatically catches the request, completes the cryptographically signed challenge, and obtains the SSL certificate automatically.
-4. **Auto-Renewal:** Certificates auto-renew in the background every 60 days without downtime.
-
-> ⚠️ **Cloud Firewall Prerequisite:**  
-> On **Google Cloud VPC** or **Oracle Cloud VCN**, you **MUST open Inbound Traffic on Port 80 & Port 443** in your Security List / Security Group rules, otherwise Let's Encrypt ACME verification will fail with a timeout!
+```text
+                           ┌─────────────────────────────┐
+                           │   Public Internet Clients   │
+                           └──────────────┬──────────────┘
+                                          │
+                 ┌────────────────────────┴────────────────────────┐
+                 │                                                 │
+          HTTP (Port 80)                                    HTTPS (Port 443)
+      [ACME Challenge / 301]                               [TLS / SSL Encrypted]
+                 │                                                 │
+                 ▼                                                 ▼
+  ┌───────────────────────────────┐               ┌─────────────────────────────────┐
+  │  ACME HTTP-01 Challenge Engine │               │   GreenlockProxy SSL Engine     │
+  │ (.well-known/acme-challenge/) │               │  (TLS Termination & Decryption) │
+  └──────────────┬────────────────┘               └────────────────┬────────────────┘
+                 │                                                 │
+                 │ Auto Certificate Provisioning                   │ Reverse Proxy Routing
+                 ▼                                                 │
+  ┌───────────────────────────────┐                                │
+  │ Let's Encrypt ACME Directory  │                                │
+  └───────────────────────────────┘                                │
+                                                                   │
+                 ┌─────────────────────────────────────────────────┴─────────────────────────────────────────────────┐
+                 │                                                                                                   │
+                 ▼                                                 ▼                                                 ▼
+   ┌───────────────────────────┐                     ┌───────────────────────────┐                     ┌───────────────────────────┐
+   │    React / Vite SPA       │                     │    Bun / Node REST API    │                     │    WebSocket Gateway      │
+   │  http://127.0.0.1:3000    │                     │  http://127.0.0.1:8080    │                     │    ws://127.0.0.1:8080     │
+   └───────────────────────────┘                     └───────────────────────────┘                     └───────────────────────────┘
+```
 
 ---
 
-## 🏗️ Architecture & Deployment Guide (React, Bun, Node, PM2)
+## 🔑 How ACME Let's Encrypt Automated SSL Certification Works
 
-### Scenario: React Frontend + Bun / Node API Backend
+1. **Inbound HTTP (Port 80):**  
+   - Intercepts Let's Encrypt ACME verification requests at `/.well-known/acme-challenge/...`.
+   - Generates cryptographically signed key authorizations and communicates directly with the Let's Encrypt ACME server directory.
+   - Automatically redirects regular HTTP web traffic to secure **HTTPS (Port 443)** with a `301 Permanent Redirect`.
 
-In a typical production setup:
-- **React / Vite SPA Frontend:** Runs on internal port `127.0.0.1:3000` (e.g. via `serve -s build -l 3000` or NGINX).
-- **Bun / Node API Backend:** Runs on internal port `127.0.0.1:8080`.
-- **GreenlockProxy:** Listens on public ports `80` & `443`, terminates HTTPS, auto-renews SSL certificates, and proxies traffic seamlessly:
-  - `https://example.com` ➔ `http://127.0.0.1:3000` (React Frontend)
-  - `https://api.example.com` ➔ `http://127.0.0.1:8080` (Bun/Node API)
+2. **Inbound HTTPS (Port 443):**  
+   - Terminates TLS/SSL encryption securely using valid Let's Encrypt certificates.
+   - Forwards decrypted HTTP/1.1 or HTTP/2 headers (`x-forwarded-for`, `x-forwarded-proto`, `x-forwarded-port`) to internal backend applications.
 
-```text
-               Public Internet (Ports 80 & 443)
-                             │
-                             ▼
-                ┌─────────────────────────┐
-                │     GreenlockProxy      │
-                │  (Auto Let's Encrypt)   │
-                └────────────┬────────────┘
-                             │
-          ┌──────────────────┴──────────────────┐
-          │                                     │
-          ▼                                     ▼
-┌──────────────────┐                  ┌──────────────────┐
-│  React / Vite    │                  │  Bun / Node API  │
-│ 127.0.0.1:3000   │                  │ 127.0.0.1:8080   │
-└──────────────────┘                  └──────────────────┘
-```
+3. **Background Auto-Renewal:**  
+   - Automatically checks certificate expiration daily and renews certificates **every 60 days** in the background without restarting backend services.
+
+> ⚠️ **Cloud Firewall Prerequisite:**  
+> On **Google Cloud VPC** or **Oracle Cloud VCN**, you **MUST open Inbound Traffic on Port 80 & Port 443** in your Security List / Security Group rules, otherwise ACME challenge validation will fail with a timeout!
 
 ---
 
 ## 📋 PM2 Production Deployment Example (`ecosystem.config.cjs`)
 
-Use **PM2** to manage `GreenlockProxy` alongside your backend and frontend services on your Oracle Cloud or GCP VM instance:
+Use **PM2** to run `GreenlockProxy` alongside your application processes on your GCP or Oracle Cloud VM instance:
 
 ```javascript
 // ecosystem.config.cjs
@@ -73,7 +82,7 @@ module.exports = {
   apps: [
     {
       name: "greenlock-proxy",
-      script: "proxy-runner.ts", // Your proxy entry script
+      script: "proxy-runner.ts", // Proxy launcher script
       interpreter: "bun",       // or "node" / "ts-node"
       watch: false,
       env: {
@@ -108,10 +117,9 @@ module.exports = {
 
 ---
 
-## 🚀 Code Example (Proxy Runner Script)
+## 🚀 Proxy Runner Script (`proxy-runner.ts`)
 
 ```typescript
-// proxy-runner.ts
 import { GreenlockProxy } from '@qalqi/greenlock-proxy';
 import dotenv from 'dotenv';
 
@@ -129,7 +137,7 @@ const proxy = new GreenlockProxy({
 // 1. React / Vite Frontend
 proxy.register(['example.com', 'www.example.com'], ['http://127.0.0.1:3000']);
 
-// 2. Bun / Node Backend API
+// 2. Bun / Node Backend REST & WebSocket API
 proxy.register(['api.example.com'], ['http://127.0.0.1:8080']);
 
 console.log('🚀 Starting GreenlockProxy ACME SSL & Reverse Proxy...');
