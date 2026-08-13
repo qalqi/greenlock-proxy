@@ -1,0 +1,44 @@
+{
+  "name": "@qalqi/greenlock-proxy",
+  "version": "1.0.0",
+  "description": "Production-grade reverse proxy with automatic Let's Encrypt SSL/TLS certificate management. Battle-tested on GCP & Oracle Cloud.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "greenlock",
+    "proxy",
+    "ssl",
+    "tls",
+    "letsencrypt",
+    "acme",
+    "reverse-proxy",
+    "http-proxy",
+    "websockets",
+    "bun",
+    "node"
+  ],
+  "author": "Qalqi <support@qalqi.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qalqi/greenlock-proxy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qalqi/greenlock-proxy/issues"
+  },
+  "homepage": "https://github.com/qalqi/greenlock-proxy#readme",
+  "dependencies": {
+    "@root/greenlock": "^4.0.5",
+    "greenlock-express": "^4.0.3",
+    "http-proxy": "^1.18.1"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.15",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
